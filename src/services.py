@@ -1,8 +1,10 @@
+import logging
 import re
 
-#Функция "Простой поиск"
-def simple_search(transactions, search_string):
-    """ Функция возвращает список всех транзакций,
+
+# Функция "Простой поиск"
+def simple_search(transactions: list[dict], search_string: str) -> list[dict]:
+    """Функция возвращает список всех транзакций,
     содержащих заданную строку в описании или категории,
     используя регулярные выражения для нечувствительного к регистру поиска"""
 
@@ -10,11 +12,12 @@ def simple_search(transactions, search_string):
 
     # Фильтрация транзакций по регулярному выражению
     result = [
-        transaction for transaction in transactions
-        if (
-                pattern.search(transaction.get('Описание', '')) or
-                pattern.search(transaction.get('Категория', ''))
-        )
+        transaction
+        for transaction in transactions
+        if isinstance(transaction.get("Описание", ""), str)
+        and pattern.search(transaction.get("Описание", ""))
+        or isinstance(transaction.get("Категория", ""), str)
+        and pattern.search(transaction.get("Категория", ""))
     ]
-
+    logging.info(f"Возвращаем список транзакций, в категории или описании которых есть -  {search_string}")
     return result

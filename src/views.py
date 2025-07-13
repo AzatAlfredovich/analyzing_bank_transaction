@@ -1,17 +1,18 @@
+import json
 import os
+from datetime import datetime
+from typing import Any
 
-import requests
 from dotenv import load_dotenv
 
-from utils import currency_convertor
+from utils import filter_by_date, get_currency_rates, get_stock_prices, reading_xlsx
 
 load_dotenv()
-from datetime import datetime
 
 
 def get_greeting(date_str: str) -> str:
     """Возвращает приветствие в зависимости от времени суток."""
-    time = datetime.strptime(date_str, "%d-%m-%Y %H:%M:%S").time()
+    time = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S").time()
     if 5 <= time.hour < 12:
         return "Доброе утро"
     elif 12 <= time.hour < 17:
@@ -35,73 +36,64 @@ def get_card_stats(df) -> list[dict]:
         total_spent = round(row["Сумма платежа"], 2)
         cashback = round(total_spent / 100, 2)
 
-        result.append({
-            "last_digits": last_digits,
-            "total_spent": total_spent,
-            "cashback": cashback
-        })
+        result.append({"last_digits": last_digits, "total_spent": total_spent, "cashback": cashback})
 
     return result
 
 
-def get_top_transactions(df) -> list[dict]:
+def get_top_transactions(df, tran_top=5) -> list[dict]:
     """Возвращает топ-5 транзакций по убыванию суммы платежа."""
-    df_sorted = df.sort_values(by="Сумма платежа", ascending=False).head(5)
+    df_sorted = df.sort_values(by="Сумма платежа", ascending=False).head(tran_top)
 
     result = []
     for _, row in df_sorted.iterrows():
-        result.append({
-            "date": row["Дата операции"].strftime("%d.%m.%Y"),
-            "amount": round(row["Сумма платежа"], 2),
-            "category": row["Категория"],
-            "description": row["Описание"]
-        })
+        result.append(
+            {
+                "date": row["Дата операции"].strftime("%d.%m.%Y"),
+                "amount": round(row["Сумма платежа"], 2),
+                "category": row["Категория"],
+                "description": row["Описание"],
+            }
+        )
 
     return result
 
-def get_currency_rates(symbols: str, base = "RUB") -> list[dict]:
 
-    url = f"https://api.apilayer.com/exchangerates_data/latest?symbols={symbols}&base={base}"
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+SETTINGS_PATH = os.path.join(CURRENT_DIR, "..", "user_settings.json")
+DATA_PATH = os.path.join(CURRENT_DIR, "..", "data", "operations.xlsx")
 
-    payload = {}
-    headers = {
-        "apikey": os.getenv("API_KEY_LAYER")
+
+def main_view(input_date: str, file_path: str = DATA_PATH, settings_path: str = SETTINGS_PATH) -> dict[str, Any]:
+    """
+    Основная функция: собирает все данные в итоговый JSON-файл для страницы "Главная"
+    """
+    df = reading_xlsx(file_path)
+    filtered_df = filter_by_date(df, input_date)
+    greeting = get_greeting(input_date)
+
+    cards = get_card_stats(filtered_df)
+    top_tx = get_top_transactions(filtered_df)
+
+    with open(settings_path, encoding="utf-8") as f:
+        settings = json.load(f)
+        print(settings)
+
+    currencies = settings.get("user_currencies", [])
+    stocks = settings.get("user_stocks", [])
+
+    currency_rates = get_currency_rates(currencies)
+    stock_prices = get_stock_prices(stocks)
+
+    return {
+        "greeting": greeting,
+        "cards": cards,
+        "top_transactions": top_tx,
+        "currency_rates": currency_rates,
+        "stock_prices": stock_prices,
     }
 
-    response = requests.get(url, headers=headers, data=payload)
-    result = response.json().get("rates")
-    result_list =[]
-    for i,v in result.items():
-        result_dict = {"currency": i, "rates": round(1/v, 2)}
-        result_list.append(result_dict)
-
-    return result_list
 
 # if __name__ == '__main__':
-#     print(get_currency_rates("EUR, USD"))
-
-def get_share_price(symbol: str) -> list[dict]:
-    apikey = os.getenv("API_KEY_12")
-    url = f"https://api.twelvedata.com/eod?symbol={symbol}&apikey={apikey}"
-
-    payload = {}
-
-    response = requests.get(url, data=payload)
-    result = response.json()
-    symbol_price = currency_convertor(result.get("currency"), result.get("close"))
-
-    result_list =[]
-    for i,v in result.items():
-    result_dict = {"currency": i, "rates": round(1/v, 2)}
-    result_list.append(result_dict)
-
-    return result_list
-
-if __name__ == '__main__':
-    print(get_share_price("AAPL"))
-
-
-
-
-
-
+#     main_view("2021-12-31 16:00:00", file_path=
+#     'C:/Users/User\PycharmProjects/analyzing_bank_transaction\data\operations.xlsx')
