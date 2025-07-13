@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Callable, Optional
